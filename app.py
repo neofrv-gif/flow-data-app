@@ -51,23 +51,23 @@ def parse_dis_file(file_content, filename):
         if match:
             data[key] = match.group(1).strip()
 
-    # 3. [핵심 수정] 수위 (Gauge Height) 데이터 행 추출 및 3칸 동일 적용
-    gauge_val = "-"
+    # 3. 수위 (Gauge Height) 처리
+    sh_m = re.search(r"Start Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+    eh_m = re.search(r"End Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
     
-    # 패턴 A: Supplemental Data 표 하단의 실제 데이터 행에서 추출 (예: 1;파일명;2.40;)
-    g_match_supp = re.search(r"Start Gauge Height[^\n]*\n+(\d+\s*;\s*[^;]+\s*;\s*([0-9.]+)\s*;)", file_content)
-    if g_match_supp:
-        gauge_val = g_match_supp.group(2).strip()
-    else:
-        # 패턴 B: 상단 일반 항목으로 작성되어 있을 경우 대비
-        g_match_gen = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content, re.IGNORECASE)
-        if g_match_gen:
-            gauge_val = g_match_gen.group(1).strip()
-
-    if gauge_val != "-":
-        data["시작수위"] = gauge_val
-        data["종료수위"] = gauge_val
-        data["평균수위"] = gauge_val
+    if not sh_m:
+        sh_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+        
+    if sh_m: data["시작수위"] = sh_m.group(1).strip()
+    if eh_m: data["종료수위"] = eh_m.group(1).strip()
+    
+    try:
+        if data["시작수위"] != "-" and data["종료수위"] != "-":
+            data["평균수위"] = f"{(float(data['시작수위']) + float(data['종료수위'])) / 2:.3f}"
+        elif data["시작수위"] != "-":
+            data["평균수위"] = data["시작수위"]
+    except:
+        pass
 
     # 4. Transect 테이블 분석 (개수 및 Mean 계산)
     in_table = False
@@ -105,7 +105,7 @@ def parse_dis_file(file_content, filename):
 
     return data
 
-# 파일 업로더
+# 파일 업로더 (완벽한 초기화 지원)
 uploaded_files = st.file_uploader(
     "📁 .dis 파일을 여기에 드래그하거나 선택하세요", 
     type=["dis", "txt"], 

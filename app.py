@@ -14,37 +14,100 @@ if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
 def parse_dis_file(file_content, filename):
-    data = {"파일명": filename}
-    keys = ["측정일", "사이트명", "위치", "게이지높이(m)", "작업자", "배", 
-            "폭(m)", "면적(m²)", "평균 깊이(m)", "평균 속력(m/s)", 
-            "총 Q(m³/s)", "최대 깊이(m)", "최대 스피드(m/s)"]
-    for k in keys: data[k] = "-"
+    # 1. 요청하신 순서대로 컬럼 초기화
+    columns = [
+        "파일명", "사이트 이름", "측정 날짜", "시스템 테스트시간(hh:mm)", "배", 
+        "시작수위", "종료수위", "평균수위", "폭", "면적", 
+        "평균속력", "평균깊이", "총 Q", "시리얼번호", "측정 횟수(Tr)", 
+        "변환기 깊이", "최대 깊이", "최대 스피드", "자기편차", 
+        "측정된 %(mean)", "보트속력(mean)", "트랙거리(mean)", 
+        "작업자", "위치"
+    ]
+    
+    data = {col: "-" for col in columns}
+    data["파일명"] = filename
 
+    # 2. 단일 값 정규식 매핑
     patterns = {
-        "측정일": r"Date Measured:\s*([0-9-]+)",
-        "사이트명": r"Site Name;\s*(.*)",
-        "위치": r"Location;\s*(.*)",
-        "게이지높이(m)": r"Gauge Height.*?;([0-9.]+)",
-        "작업자": r"Party;\s*(.*)",
+        "사이트 이름": r"Site Name;\s*(.*)",
+        "측정 날짜": r"Date Measured:\s*([0-9-]+)",
         "배": r"Boat/Motor;\s*(.*)",
-        "폭(m)": r"Width\s*\(m\);\s*([0-9.]+)",
-        "면적(m²)": r"Area\s*\(m\s*[²2]\);\s*([0-9.]+)",
-        "평균 깊이(m)": r"Mean Depth\s*\(m\);\s*([0-9.]+)",
-        "평균 속력(m/s)": r"Mean Speed\s*\(m/s\);\s*([0-9.]+)",
-        "총 Q(m³/s)": r"Total Q\s*\(m\s*[³3]/s\);\s*([0-9.]+)",
-        "최대 깊이(m)": r"Maximum Depth\s*\(m\);\s*([0-9.]+)",
-        "최대 스피드(m/s)": r"Maximum Speed\s*\(m/s\);\s*([0-9.]+)"
+        "폭": r"Width\s*\(m\);\s*([0-9.]+)",
+        "면적": r"Area\s*\(m\s*[²2]\);\s*([0-9.]+)",
+        "평균속력": r"Mean Speed\s*\(m/s\);\s*([0-9.]+)",
+        "평균깊이": r"Mean Depth\s*\(m\);\s*([0-9.]+)",
+        "총 Q": r"Total Q\s*\(m\s*[³3]/s\);\s*([0-9.]+)",
+        "시리얼번호": r"Serial Number;\s*(.*)",
+        "변환기 깊이": r"Transducer Depth\s*\(m\);\s*([0-9.]+)",
+        "최대 깊이": r"Maximum Depth\s*\(m\);\s*([0-9.]+)",
+        "최대 스피드": r"Maximum Speed\s*\(m/s\);\s*([0-9.]+)",
+        "자기편차": r"Magnetic Declination\s*\(deg\);\s*([0-9.-]+)",
+        "작업자": r"Party;\s*(.*)",
+        "위치": r"Location;\s*(.*)"
     }
 
     for key, pattern in patterns.items():
         match = re.search(pattern, file_content)
         if match:
             data[key] = match.group(1).strip()
+
+    # 3. 수위 (Gauge Height) 처리
+    sh_m = re.search(r"Start Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+    eh_m = re.search(r"End Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+    
+    if not sh_m:
+        sh_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+        
+    if sh_m: data["시작수위"] = sh_m.group(1).strip()
+    if eh_m: data["종료수위"] = eh_m.group(1).strip()
+    
+    try:
+        if data["시작수위"] != "-" and data["종료수위"] != "-":
+            data["평균수위"] = f"{(float(data['시작수위']) + float(data['종료수위'])) / 2:.3f}"
+        elif data["시작수위"] != "-":
+            data["평균수위"] = data["시작수위"]
+    except:
+        pass
+
+    # 4. Transect 테이블 분석 (개수 및 Mean 계산)
+    in_table = False
+    transects = []
+    for line in file_content.split('\n'):
+        if line.startswith("Transect\tFile Name"):
+            in_table = True
+            continue
+        if in_table:
+            parts = line.split('\t')
+            # 행이 숫자(Tr#)로 시작하고 데이터가 있는 경우만 수집
+            if len(parts) > 15 and parts[0].strip().isdigit():
+                transects.append(parts)
+
+    if transects:
+        data["측정 횟수(Tr)"] = str(len(transects))
+        try:
+            # 합계 계산
+            track_sum = sum(float(t[5]) for t in transects if t[5].strip())
+            boat_spd_sum = sum(float(t[9]) for t in transects if t[9].strip())
+            pct_meas_sum = sum(float(t[18].strip()) for t in transects if len(t) > 18 and t[18].strip())
+            
+            # 평균(Mean) 할당
+            data["트랙거리(mean)"] = f"{track_sum / len(transects):.3f}"
+            data["보트속력(mean)"] = f"{boat_spd_sum / len(transects):.4f}"
+            data["측정된 %(mean)"] = f"{pct_meas_sum / len(transects):.2f}"
+            
+            # 5. 시스템 테스트 시간 추출 (Transect 1의 Start Time 기준)
+            time_str = transects[0][3]
+            m = re.search(r"\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2})", time_str)
+            if m:
+                data["시스템 테스트시간(hh:mm)"] = m.group(1)
+        except Exception:
+            pass
+
     return data
 
 # 파일 업로더 (완벽한 초기화 지원)
 uploaded_files = st.file_uploader(
-    "📁 .dis 파일을 여기에 드래그하거나 선택하세요 (대량 업로드 환영)", 
+    "📁 .dis 파일을 여기에 드래그하거나 선택하세요", 
     type=["dis", "txt"], 
     accept_multiple_files=True,
     key=f"uploader_{st.session_state.uploader_key}"
@@ -60,11 +123,11 @@ if uploaded_files:
             st.session_state.flow_data.append(parse_dis_file(content, file.name))
 
 if st.session_state.flow_data:
+    # 딕셔너리 순서대로 DataFrame 생성
     df = pd.DataFrame(st.session_state.flow_data)
     
     st.markdown("### 💾 저장 설정")
-    # 파일 이름을 사용자가 직접 입력할 수 있는 텍스트 박스
-    custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (확장자 제외 예) 260515_5팀)", value="")
+    custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (확장자 제외)", value="수문유량결과_최종본")
     
     col1, col2, col3 = st.columns(3)
     

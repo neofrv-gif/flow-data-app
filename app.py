@@ -51,10 +51,20 @@ def parse_dis_file(file_content, filename):
         if match:
             data[key] = match.group(1).strip()
 
-    # 3. 수위 (Gauge Height) 3칸 동일 적용 로직
-    gauge_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-    if gauge_m:
-        gauge_val = gauge_m.group(1).strip()
+    # 3. [핵심 수정] 수위 (Gauge Height) 데이터 행 추출 및 3칸 동일 적용
+    gauge_val = "-"
+    
+    # 패턴 A: Supplemental Data 표 하단의 실제 데이터 행에서 추출 (예: 1;파일명;2.40;)
+    g_match_supp = re.search(r"Start Gauge Height[^\n]*\n+(\d+\s*;\s*[^;]+\s*;\s*([0-9.]+)\s*;)", file_content)
+    if g_match_supp:
+        gauge_val = g_match_supp.group(2).strip()
+    else:
+        # 패턴 B: 상단 일반 항목으로 작성되어 있을 경우 대비
+        g_match_gen = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content, re.IGNORECASE)
+        if g_match_gen:
+            gauge_val = g_match_gen.group(1).strip()
+
+    if gauge_val != "-":
         data["시작수위"] = gauge_val
         data["종료수위"] = gauge_val
         data["평균수위"] = gauge_val

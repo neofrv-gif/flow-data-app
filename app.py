@@ -51,23 +51,13 @@ def parse_dis_file(file_content, filename):
         if match:
             data[key] = match.group(1).strip()
 
-    # 3. 수위 (Gauge Height) 처리
-    sh_m = re.search(r"Start Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-    eh_m = re.search(r"End Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-    
-    if not sh_m:
-        sh_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-        
-    if sh_m: data["시작수위"] = sh_m.group(1).strip()
-    if eh_m: data["종료수위"] = eh_m.group(1).strip()
-    
-    try:
-        if data["시작수위"] != "-" and data["종료수위"] != "-":
-            data["평균수위"] = f"{(float(data['시작수위']) + float(data['종료수위'])) / 2:.3f}"
-        elif data["시작수위"] != "-":
-            data["평균수위"] = data["시작수위"]
-    except:
-        pass
+    # 3. 수위 (Gauge Height) 3칸 동일 적용 로직
+    gauge_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
+    if gauge_m:
+        gauge_val = gauge_m.group(1).strip()
+        data["시작수위"] = gauge_val
+        data["종료수위"] = gauge_val
+        data["평균수위"] = gauge_val
 
     # 4. Transect 테이블 분석 (개수 및 Mean 계산)
     in_table = False
@@ -105,7 +95,7 @@ def parse_dis_file(file_content, filename):
 
     return data
 
-# 파일 업로더 (완벽한 초기화 지원)
+# 파일 업로더
 uploaded_files = st.file_uploader(
     "📁 .dis 파일을 여기에 드래그하거나 선택하세요", 
     type=["dis", "txt"], 

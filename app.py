@@ -4,11 +4,16 @@ import io
 import re
 
 st.set_page_config(page_title="수문 유량 데이터 추출기", layout="wide")
-st.title("🌊 수문 유량 데이터 추출기 by KJH (.dis 전용)")
+st.title("🌊 유량 데이터 추출 by KJH(.dis 전용)")
 st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 엑셀 데이터로 변환됩니다.")
 
+# 데이터 저장을 위한 세션 상태
 if "flow_data" not in st.session_state:
     st.session_state.flow_data = []
+
+# 파일 업로더 완전 초기화를 위한 키(Key) 값 세션 상태
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 def parse_dis_file(file_content, filename):
     data = {"파일명": filename}
@@ -39,7 +44,13 @@ def parse_dis_file(file_content, filename):
             data[key] = match.group(1).strip()
     return data
 
-uploaded_files = st.file_uploader("📁 .dis 파일 업로드 (여러 개 가능)", type=["dis", "txt"], accept_multiple_files=True)
+# 파일 업로더 (key 값을 동적으로 변경하여 완벽한 초기화 구현)
+uploaded_files = st.file_uploader(
+    "📁 .dis 파일을 여기에 드래그하거나 선택하세요 (대량 업로드 환영)", 
+    type=["dis", "txt"], 
+    accept_multiple_files=True,
+    key=f"uploader_{st.session_state.uploader_key}"
+)
 
 if uploaded_files:
     for file in uploaded_files:
@@ -53,17 +64,36 @@ if uploaded_files:
 if st.session_state.flow_data:
     df = pd.DataFrame(st.session_state.flow_data)
     
-    col1, col2, col3 = st.columns([1, 1, 6])
+    # UI 개선: 3개의 버튼을 균일한 너비로 배치
+    col1, col2, col3 = st.columns(3)
+    
     csv_bytes = df.to_csv(index=False).encode('utf-8-sig')
-    col1.download_button("📄 CSV 저장", data=csv_bytes, file_name="유량결과.csv", mime="text/csv")
+    with col1:
+        st.download_button(
+            label="📥 CSV 포맷 다운로드", 
+            data=csv_bytes, 
+            file_name="유량결과.csv", 
+            mime="text/csv",
+            use_container_width=True
+        )
         
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='수문유량결과')
-    col2.download_button("📊 Excel 저장", data=output.getvalue(), file_name="유량결과.xlsx", mime="application/vnd.ms-excel")
+    with col2:
+        st.download_button(
+            label="📊 Excel 포맷 다운로드", 
+            data=output.getvalue(), 
+            file_name="유량결과.xlsx", 
+            mime="application/vnd.ms-excel",
+            use_container_width=True
+        )
 
-    if col3.button("🗑️ 초기화", type="primary"):
-        st.session_state.flow_data = []
-        st.rerun()
+    with col3:
+        if st.button("🔄 전체 데이터 및 파일 초기화", type="primary", use_container_width=True):
+            st.session_state.flow_data = []           # 데이터 비우기
+            st.session_state.uploader_key += 1        # 업로더 위젯 키 변경 (완전 초기화 핵심)
+            st.rerun()
 
+    st.markdown("---")
     st.data_editor(df, use_container_width=True)

@@ -156,7 +156,7 @@ if st.session_state.flow_data:
     df = pd.DataFrame(st.session_state.flow_data)
     
     st.markdown("### 💾 저장 설정")
-    custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (확장자 제외)", value="수문유량결과_최종본")
+    custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (확장자 제외)", value="260515_5팀")
     
     col1, col2, col3 = st.columns(3)
     

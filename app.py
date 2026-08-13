@@ -5,8 +5,8 @@ import re
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="유량 데이터 추출기", layout="wide")
-st.title("🌊 유량 데이터 추출 by KJH(.dis 전용)")
-st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 지정된 순서대로 엑셀 데이터가 추출 및 계산됩니다.")
+st.title("🌊 유량 데이터 추출(.dis 전용)")
+st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 지정된 순서대로 엑셀 데이터가 추출 및 계산됩니다. by KJH")
 
 # 데이터 및 초기화 키 세션 상태
 if "flow_data" not in st.session_state:

@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import re
 from datetime import datetime, timedelta, date, time
+import pytz
 
 st.set_page_config(page_title="유량 데이터 추출기", layout="wide")
 st.title("🌊 유량 데이터 추출(.dis 전용)")
@@ -198,8 +199,11 @@ if st.session_state.flow_data:
     df = pd.DataFrame(st.session_state.flow_data)
     
     st.markdown("### 💾 저장 설정")
-    today_str = datetime.now().strftime("%y%m%d")
+    # 한국 시간(KST) 기준으로 오늘 날짜 가져오기
+    kst = pytz.timezone('Asia/Seoul')
+    today_str = datetime.now(kst).strftime("%y%m%d")
     default_name = f"{today_str}_"
+    
     custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (예시 260705_5팀)", value=default_name)
     
     col1, col2, col3 = st.columns(3)

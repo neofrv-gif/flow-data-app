@@ -233,5 +233,5 @@ if st.session_state.flow_data:
             st.rerun()
 
     st.markdown("---")
-    st.warning("🚨 **수위를 입력해주세요!** 추출 결과는 아래 표에서 엑셀처럼 더블클릭하여 직접 수정이 가능합니다.")
+    st.warning("🚨 **수위를 입력해주세요!** 추출 후 아래 표를 엑셀처럼 더블클릭해 직접 수정 및 드래그 삭제가 가능합니다.")
     st.data_editor(df, use_container_width=True)

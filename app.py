@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="유량 데이터 추출기", layout="wide")
 st.title("🌊 유량 데이터 추출 by KJH(.dis 전용)")
-st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 엑셀 데이터로 변환됩니다.")
+st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 지정된 순서대로 엑셀 데이터가 추출 및 계산됩니다.")
 
 # 데이터 및 초기화 키 세션 상태
 if "flow_data" not in st.session_state:
@@ -13,10 +14,36 @@ if "flow_data" not in st.session_state:
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
+def format_measurement_time(start_time_str, end_time_str, duration_str):
+    """최초 시작시간과 마지막 종료시간을 바탕으로 10분 단위 측정시간 범위 계산"""
+    try:
+        # 1. 시작 시간 계산 (-10분 후 10분 단위로 내림)
+        start_dt = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
+        logical_start_dt = start_dt - timedelta(minutes=10)
+        logical_start_min = (logical_start_dt.minute // 10) * 10
+        logical_start_dt = logical_start_dt.replace(minute=logical_start_min, second=0)
+        
+        # 2. 종료 시간 계산 (마지막 측정시간 + 소요시간 후 10분 단위로 올림)
+        h, m, s = map(int, duration_str.split(':'))
+        end_dt = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
+        real_end_dt = end_dt + timedelta(hours=h, minutes=m, seconds=s)
+        
+        minutes_up = ((real_end_dt.minute // 10) + 1) * 10
+        if real_end_dt.minute % 10 == 0 and real_end_dt.second == 0:
+            logical_end_dt = real_end_dt
+        else:
+            diff = minutes_up - real_end_dt.minute
+            logical_end_dt = real_end_dt + timedelta(minutes=diff)
+            logical_end_dt = logical_end_dt.replace(second=0)
+            
+        return f"{logical_start_dt.strftime('%H:%M')} ~ {logical_end_dt.strftime('%H:%M')}"
+    except Exception:
+        return "-"
+
 def parse_dis_file(file_content, filename):
-    # 1. 요청하신 순서대로 컬럼 초기화
+    # 1. 요청하신 순서대로 컬럼 초기화 (시스템 테스트시간 -> 측정시간)
     columns = [
-        "파일명", "사이트 이름", "측정 날짜", "시스템 테스트시간(hh:mm)", "배", 
+        "파일명", "사이트 이름", "측정 날짜", "측정시간", "배", 
         "시작수위", "종료수위", "평균수위", "폭", "면적", 
         "평균속력", "평균깊이", "총 Q", "시리얼번호", "측정 횟수(Tr)", 
         "변환기 깊이", "최대 깊이", "최대 스피드", "자기편차", 
@@ -49,27 +76,31 @@ def parse_dis_file(file_content, filename):
     for key, pattern in patterns.items():
         match = re.search(pattern, file_content)
         if match:
-            data[key] = match.group(1).strip()
+            val = match.group(1).strip()
+            # 소수점 반올림 처리
+            if key == "총 Q":
+                data[key] = f"{float(val):.3f}"
+            elif key in ["평균속력", "평균깊이"]:
+                data[key] = f"{float(val):.2f}"
+            else:
+                data[key] = val
 
-    # 3. 수위 (Gauge Height) 처리
-    sh_m = re.search(r"Start Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-    eh_m = re.search(r"End Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-    
-    if not sh_m:
-        sh_m = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content)
-        
-    if sh_m: data["시작수위"] = sh_m.group(1).strip()
-    if eh_m: data["종료수위"] = eh_m.group(1).strip()
-    
-    try:
-        if data["시작수위"] != "-" and data["종료수위"] != "-":
-            data["평균수위"] = f"{(float(data['시작수위']) + float(data['종료수위'])) / 2:.3f}"
-        elif data["시작수위"] != "-":
-            data["평균수위"] = data["시작수위"]
-    except:
-        pass
+    # 3. 수위 (Gauge Height) 3칸 동일 적용 로직
+    gauge_val = "-"
+    g_match_supp = re.search(r"Start Gauge Height[^\n]*\n+(\d+\s*;\s*[^;]+\s*;\s*([0-9.]+)\s*;)", file_content)
+    if g_match_supp:
+        gauge_val = g_match_supp.group(2).strip()
+    else:
+        g_match_gen = re.search(r"Gauge Height.*?[;:]\s*([0-9.]+)", file_content, re.IGNORECASE)
+        if g_match_gen:
+            gauge_val = g_match_gen.group(1).strip()
 
-    # 4. Transect 테이블 분석 (개수 및 Mean 계산)
+    if gauge_val != "-":
+        data["시작수위"] = gauge_val
+        data["종료수위"] = gauge_val
+        data["평균수위"] = gauge_val
+
+    # 4. Transect 테이블 분석 (개수, 시간, Mean 계산)
     in_table = False
     transects = []
     for line in file_content.split('\n'):
@@ -78,34 +109,33 @@ def parse_dis_file(file_content, filename):
             continue
         if in_table:
             parts = line.split('\t')
-            # 행이 숫자(Tr#)로 시작하고 데이터가 있는 경우만 수집
             if len(parts) > 15 and parts[0].strip().isdigit():
                 transects.append(parts)
 
     if transects:
         data["측정 횟수(Tr)"] = str(len(transects))
         try:
-            # 합계 계산
+            # 5. 측정시간(hh:mm 범위) 계산
+            first_start_time = transects[0][3]
+            last_start_time = transects[-1][3]
+            last_duration = transects[-1][4]
+            data["측정시간"] = format_measurement_time(first_start_time, last_start_time, last_duration)
+
+            # 합계 및 평균(Mean) 계산
             track_sum = sum(float(t[5]) for t in transects if t[5].strip())
             boat_spd_sum = sum(float(t[9]) for t in transects if t[9].strip())
             pct_meas_sum = sum(float(t[18].strip()) for t in transects if len(t) > 18 and t[18].strip())
             
-            # 평균(Mean) 할당
             data["트랙거리(mean)"] = f"{track_sum / len(transects):.3f}"
             data["보트속력(mean)"] = f"{boat_spd_sum / len(transects):.4f}"
             data["측정된 %(mean)"] = f"{pct_meas_sum / len(transects):.2f}"
             
-            # 5. 시스템 테스트 시간 추출 (Transect 1의 Start Time 기준)
-            time_str = transects[0][3]
-            m = re.search(r"\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2})", time_str)
-            if m:
-                data["시스템 테스트시간(hh:mm)"] = m.group(1)
         except Exception:
             pass
 
     return data
 
-# 파일 업로더 (완벽한 초기화 지원)
+# 파일 업로더
 uploaded_files = st.file_uploader(
     "📁 .dis 파일을 여기에 드래그하거나 선택하세요", 
     type=["dis", "txt"], 
@@ -123,7 +153,6 @@ if uploaded_files:
             st.session_state.flow_data.append(parse_dis_file(content, file.name))
 
 if st.session_state.flow_data:
-    # 딕셔너리 순서대로 DataFrame 생성
     df = pd.DataFrame(st.session_state.flow_data)
     
     st.markdown("### 💾 저장 설정")

@@ -77,10 +77,10 @@ def parse_dis_file(file_content, filename):
         match = re.search(pattern, file_content)
         if match:
             val = match.group(1).strip()
-            # 소수점 반올림 처리
+            # 소수점 반올림 처리 (폭, 면적 추가)
             if key == "총 Q":
                 data[key] = f"{float(val):.3f}"
-            elif key in ["평균속력", "평균깊이"]:
+            elif key in ["평균속력", "평균깊이", "폭", "면적"]:
                 data[key] = f"{float(val):.2f}"
             else:
                 data[key] = val
@@ -126,8 +126,8 @@ def parse_dis_file(file_content, filename):
             boat_spd_sum = sum(float(t[9]) for t in transects if t[9].strip())
             pct_meas_sum = sum(float(t[18].strip()) for t in transects if len(t) > 18 and t[18].strip())
             
-            data["트랙거리(mean)"] = f"{track_sum / len(transects):.3f}"
-            data["보트속력(mean)"] = f"{boat_spd_sum / len(transects):.4f}"
+            data["트랙거리(mean)"] = f"{track_sum / len(transects):.2f}"
+            data["보트속력(mean)"] = f"{boat_spd_sum / len(transects):.2f}"
             data["측정된 %(mean)"] = f"{pct_meas_sum / len(transects):.2f}"
             
         except Exception:
@@ -157,7 +157,7 @@ if st.session_state.flow_data:
     
     st.markdown("### 💾 저장 설정")
     today_str = datetime.now().strftime("%y%m%d")
-    default_name=f"{today_str}_"
+    default_name = f"{today_str}_"
     custom_filename = st.text_input("저장할 파일 이름을 입력하세요 (예시 260705_5팀)", value=default_name)
     
     col1, col2, col3 = st.columns(3)

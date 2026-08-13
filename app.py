@@ -41,7 +41,7 @@ def format_measurement_time(start_time_str, end_time_str, duration_str):
         return "-"
 
 def parse_dis_file(file_content, filename):
-    # 1. 요청하신 순서대로 컬럼 초기화 (시스템 테스트시간 -> 측정시간)
+    # 1. 요청하신 순서대로 컬럼 초기화
     columns = [
         "파일명", "사이트 이름", "측정 날짜", "측정시간", "배", 
         "시작수위", "종료수위", "평균수위", "폭", "면적", 
@@ -77,11 +77,16 @@ def parse_dis_file(file_content, filename):
         match = re.search(pattern, file_content)
         if match:
             val = match.group(1).strip()
-            # 소수점 반올림 처리 (폭, 면적 추가)
+            
+            # 수치 및 텍스트 포맷 처리
             if key == "총 Q":
                 data[key] = f"{float(val):.3f}"
             elif key in ["평균속력", "평균깊이", "폭", "면적"]:
                 data[key] = f"{float(val):.2f}"
+            elif key == "시리얼번호" and "RS5" in val:
+                # RS5 문자가 포함되어 있다면 나머지 숫자에 괄호 씌우기
+                num_part = val.replace("RS5", "").strip()
+                data[key] = f"RS5({num_part})"
             else:
                 data[key] = val
 

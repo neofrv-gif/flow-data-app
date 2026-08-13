@@ -55,9 +55,9 @@ def format_measurement_time(first_start_time, last_start_time, last_duration):
         return "-"
 
 def parse_dis_file(file_content, filename):
-    # 컬럼 초기화
+    # 1. 요청하신 순서대로 컬럼 초기화 ("배" 대신 "날씨"로 변경)
     columns = [
-        "파일명", "사이트 이름", "측정 날짜", "측정시간", "배", 
+        "파일명", "사이트 이름", "측정 날짜", "측정시간", "날씨", 
         "시작수위", "종료수위", "평균수위", "폭", "면적", 
         "평균속력", "평균깊이", "총 Q", "시리얼번호", "측정 횟수(Tr)", 
         "변환기 깊이", "최대 깊이", "최대 스피드", "자기편차", 
@@ -67,12 +67,13 @@ def parse_dis_file(file_content, filename):
     
     data = {col: "-" for col in columns}
     data["파일명"] = filename
+    data["날씨"] = ""  # 날씨의 기본값은 아예 빈칸으로 설정 (수정하기 편하도록)
 
-    # 단일 값 정규식 매핑 (한글/영문 파일 완벽 대응)
+    # 2. 단일 값 정규식 매핑 (한글/영문 파일 완벽 대응)
     patterns = {
         "사이트 이름": r"(?:Site Name|사이트 이름);\s*(.*)",
         "측정 날짜": r"(?:Date Measured|생성 날짜):\s*([0-9-]+)",
-        "날씨": r"(?:Comments|사이트 설명);\s*(.*)",
+        "날씨": r"(?:Comments|사이트 설명);\s*(.*)",  # 파일에 적힌 날씨(맑음 등)를 바로 가져옴
         "폭": r"(?:Width|폭)\s*\(m\);\s*([0-9.]+)",
         "면적": r"(?:Area|면적)\s*\(m\s*[²2]\);\s*([0-9.]+)",
         "평균속력": r"(?:Mean Speed|평균유속)\s*\(m/s\);\s*([0-9.]+)",
@@ -102,7 +103,7 @@ def parse_dis_file(file_content, filename):
             else:
                 data[key] = val
 
-    # 수위 (Gauge Height) 3칸 동일 적용 로직
+    # 3. 수위 (Gauge Height) 3칸 동일 적용 로직
     gauge_val = "-"
     g_match_supp = re.search(r"Start Gauge Height[^\n]*\n+(\d+\s*;\s*[^;]+\s*;\s*([0-9.]+)\s*;)", file_content)
     if g_match_supp:
@@ -117,7 +118,7 @@ def parse_dis_file(file_content, filename):
         data["종료수위"] = gauge_val
         data["평균수위"] = gauge_val
 
-    # Transect 테이블 분석 (언어 감지 및 인덱스 동적 할당)
+    # 4. Transect 테이블 분석 (언어 감지 및 인덱스 동적 할당)
     in_table = False
     transects = []
     is_korean = False

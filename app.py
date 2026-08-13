@@ -77,14 +77,12 @@ def parse_dis_file(file_content, filename):
         match = re.search(pattern, file_content)
         if match:
             val = match.group(1).strip()
-            
-            # 수치 및 텍스트 포맷 처리
+            # 소수점 반올림 및 괄호 처리
             if key == "총 Q":
                 data[key] = f"{float(val):.3f}"
             elif key in ["평균속력", "평균깊이", "폭", "면적"]:
                 data[key] = f"{float(val):.2f}"
             elif key == "시리얼번호" and "RS5" in val:
-                # RS5 문자가 포함되어 있다면 나머지 숫자에 괄호 씌우기
                 num_part = val.replace("RS5", "").strip()
                 data[key] = f"RS5({num_part})"
             else:
@@ -196,4 +194,8 @@ if st.session_state.flow_data:
             st.rerun()
 
     st.markdown("---")
+    
+    # 🚨 요청하신 안내 문구 추가 부분 🚨
+    st.warning("🚨 **수위를 입력해주세요!** 추출 결과는 아래 표에서 엑셀처럼 더블클릭하여 직접 수정이 가능합니다.")
+    
     st.data_editor(df, use_container_width=True)

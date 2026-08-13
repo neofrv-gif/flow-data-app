@@ -196,6 +196,6 @@ if st.session_state.flow_data:
     st.markdown("---")
     
     # 🚨 요청하신 안내 문구 추가 부분 🚨
-    st.warning("🚨 **수위를 입력해주세요!** 추출 결과는 아래 표에서 엑셀처럼 더블클릭하여 직접 수정이 가능합니다.")
+    st.warning("🚨 **수위를 입력해주세요!** 추출 후 아래 표에서 엑셀처럼 더블클릭하여 직접 수정이 가능하며, 드래그해서 삭제도 가능합니다!")
     
     st.data_editor(df, use_container_width=True)

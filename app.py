@@ -74,7 +74,7 @@ def parse_dis_file(file_content, filename):
     patterns = {
         "사이트 이름": r"(?:Site Name|사이트 이름);\s*(.*)",
         "측정 날짜": r"(?:Date Measured|생성 날짜):\s*([0-9-]+)",
-        "날씨": r"(?:Comments|사이트 설명);\s*(.*)",  # 파일에 적힌 날씨(맑음 등)를 바로 가져옴
+        "날씨": r"(?:Comments|사이트 설명);[ \t]*([^\n\r]*)",
         "폭": r"(?:Width|폭)\s*\(m\);\s*([0-9.]+)",
         "면적": r"(?:Area|면적)\s*\(m\s*[²2]\);\s*([0-9.]+)",
         "평균속력": r"(?:Mean Speed|평균유속)\s*\(m/s\);\s*([0-9.]+)",

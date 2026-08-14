@@ -5,9 +5,49 @@ import re
 from datetime import datetime, timedelta, date, time
 import pytz
 
-st.set_page_config(page_title="유량 데이터 추출기", layout="wide")
-st.title("🌊 유량 데이터 추출(.dis 전용)")
-st.info("💡 .dis 파일을 드래그 앤 드롭하면 즉시 엑셀 데이터 추출이 진행됩니다. by KJH")
+# 1. 페이지 기본 설정 (아이콘 추가 및 와이드 레이아웃)
+st.set_page_config(page_title="유량 데이터 추출기", page_icon="🌊", layout="wide")
+
+# 2. 커스텀 CSS (디자인 업그레이드)
+st.markdown("""
+<style>
+    /* 상단 여백 축소 */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    /* 다운로드 버튼 스타일링 (모던 블루톤) */
+    div.stDownloadButton > button {
+        background-color: #f8fbff;
+        border: 1px solid #4a90e2;
+        color: #4a90e2;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    div.stDownloadButton > button:hover {
+        background-color: #4a90e2;
+        color: white;
+        border: 1px solid #4a90e2;
+    }
+    /* 초기화 버튼 스타일링 (부드러운 레드) */
+    div.stButton > button[kind="primary"] {
+        background-color: #ff6b6b;
+        border: none;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #fa5252;
+    }
+    /* 안내 문구 박스 스타일 조정 */
+    div[data-testid="stTitle"] {
+        margin-bottom: -1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🌊 유량 데이터 자동 추출기")
+st.info("💡 **사용 가이드:** `.dis` 파일을 아래에 드래그 앤 드롭하면, 엑셀 데이터가 즉시 추출되며 품질(QA/QC) 검증이 진행됩니다.")
 
 # 데이터 및 초기화 키 세션 상태
 if "flow_data" not in st.session_state:
@@ -180,7 +220,6 @@ def parse_dis_file(file_content, filename):
                 if mean_v == 0: return 0
                 return max(abs(x - mean_v) for x in lst) / mean_v * 100
 
-            # 🚨 문자열에 직접 기호를 삽입하는 방식으로 시각화 🚨
             def add_warning(val, dev):
                 if dev >= 20: return f"🔴 {val}"
                 elif dev >= 10: return f"🟡 {val}"
@@ -206,8 +245,9 @@ def parse_dis_file(file_content, filename):
 
     return data
 
+# 파일 업로더 라벨 간소화
 uploaded_files = st.file_uploader(
-    "📁 .dis 파일을 여기에 드래그하거나 선택하세요", 
+    "여기에 `.dis` 파일을 여러 개 드래그하거나 클릭하여 업로드하세요.", 
     type=["dis", "txt"], 
     accept_multiple_files=True,
     key=f"uploader_{st.session_state.uploader_key}"
@@ -225,36 +265,48 @@ if uploaded_files:
 if st.session_state.flow_data:
     df = pd.DataFrame(st.session_state.flow_data)
     
-    st.markdown("### 💾 저장 설정")
-    kst = pytz.timezone('Asia/Seoul')
-    today_str = datetime.now(kst).strftime("%y%m%d")
-    default_name = f"{today_str}_"
-    custom_filename = st.text_input("저장할 파일 이름을 입력하세요", value=default_name)
+    st.divider() # 시각적 구분선 추가
     
-    col1, col2, col3 = st.columns(3)
-    
-    # 다운로드할 때는 경고 기호(🔴, 🟡)를 깔끔하게 제거하여 순수 숫자만 남김
-    export_df = df.copy()
-    for col in export_df.columns:
-        if export_df[col].dtype == object:
-            export_df[col] = export_df[col].apply(lambda x: str(x).replace("🔴 ", "").replace("🟡 ", "") if isinstance(x, str) else x)
-
-    csv_bytes = export_df.to_csv(index=False).encode('utf-8-sig')
-    with col1:
-        st.download_button(label="📥 CSV 다운로드", data=csv_bytes, file_name=f"{custom_filename}.csv", mime="text/csv", use_container_width=True)
+    # 상단 툴바(안내문구 및 컨트롤 패널)를 컬럼으로 배치
+    header_col1, header_col2 = st.columns([7, 3])
+    with header_col1:
+        st.markdown("### 📊 추출 및 검증 결과")
+        st.caption("🚨 수위를 직접 입력해주세요! 🔴(20% 편차/50% 미만), 🟡(10% 편차/60% 미만)")
         
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        export_df.to_excel(writer, index=False, sheet_name='수문유량결과')
-    with col2:
-        st.download_button(label="📊 Excel 다운로드", data=output.getvalue(), file_name=f"{custom_filename}.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
+    # 결과 테이블 출력 (인덱스 숨김 처리로 훨씬 깔끔하게)
+    st.data_editor(df, use_container_width=True, hide_index=True)
+    
+    # 다운로드 및 제어 패널 (컨테이너 박스로 예쁘게 묶기)
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("#### 💾 데이터 저장 및 관리")
+        
+        kst = pytz.timezone('Asia/Seoul')
+        today_str = datetime.now(kst).strftime("%y%m%d")
+        default_name = f"{today_str}_결과"
+        custom_filename = st.text_input("저장할 파일 이름", value=default_name)
+        
+        # 다운로드할 때 경고 기호(🔴, 🟡) 제거
+        export_df = df.copy()
+        for col in export_df.columns:
+            if export_df[col].dtype == object:
+                export_df[col] = export_df[col].apply(lambda x: str(x).replace("🔴 ", "").replace("🟡 ", "") if isinstance(x, str) else x)
 
-    with col3:
-        if st.button("🔄 전체 데이터 초기화", type="primary", use_container_width=True):
-            st.session_state.flow_data = []
-            st.session_state.uploader_key += 1
-            st.rerun()
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        csv_bytes = export_df.to_csv(index=False).encode('utf-8-sig')
+        
+        with btn_col1:
+            st.download_button(label="📥 CSV 다운로드", data=csv_bytes, file_name=f"{custom_filename}.csv", mime="text/csv", use_container_width=True)
+            
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            export_df.to_excel(writer, index=False, sheet_name='수문유량결과')
+            
+        with btn_col2:
+            st.download_button(label="📊 Excel 다운로드", data=output.getvalue(), file_name=f"{custom_filename}.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
 
-    st.markdown("---")
-    st.warning("🚨 **수위를 입력해주세요!** 표 안에서 직접 수정이 가능하며, 🔴(빨강)/🟡(노랑) 기호는 편차가 크거나 주의가 필요한 데이터입니다.")
-    st.data_editor(df, use_container_width=True)
+        with btn_col3:
+            if st.button("🔄 전체 데이터 초기화", type="primary", use_container_width=True):
+                st.session_state.flow_data = []
+                st.session_state.uploader_key += 1
+                st.rerun()

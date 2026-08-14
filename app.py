@@ -47,7 +47,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌊 유량 데이터 자동 추출기")
-st.info("💡 **사용 가이드:** `.dis` 파일을 아래에 드래그 앤 드롭하면, 엑셀 데이터가 즉시 추출되며 품질(QA/QC) 검증이 진행됩니다.")
+st.info("💡 **사용 가이드:** `.dis` 파일을 아래에 드래그 앤 드롭하면, 엑셀 데이터가 즉시 추출됩니다.")
 
 # 데이터 및 초기화 키 세션 상태
 if "flow_data" not in st.session_state:
@@ -265,18 +265,18 @@ if uploaded_files:
 if st.session_state.flow_data:
     df = pd.DataFrame(st.session_state.flow_data)
     
-    st.divider() # 시각적 구분선 추가
+    st.divider()
     
     # 상단 툴바(안내문구 및 컨트롤 패널)를 컬럼으로 배치
     header_col1, header_col2 = st.columns([7, 3])
     with header_col1:
         st.markdown("### 📊 추출 및 검증 결과")
-        st.caption("🚨 수위를 직접 입력해주세요! 🔴(20% 편차/50% 미만), 🟡(10% 편차/60% 미만)")
+        st.caption("🚨 아래 표는 엑셀처럼 수정이 가능합니다. 편집한 뒤 아래에서 다운로드해야 수정한 내용이 저장됩니다.")
         
-    # 결과 테이블 출력 (인덱스 숨김 처리로 훨씬 깔끔하게)
-    st.data_editor(df, use_container_width=True, hide_index=True)
+    # 🚨 수정된 데이터를 온전히 받아오기 위해 st.data_editor를 다운로드 로직 위로 올렸습니다.
+    edited_df = st.data_editor(df, use_container_width=True, hide_index=True)
     
-    # 다운로드 및 제어 패널 (컨테이너 박스로 예쁘게 묶기)
+    # 다운로드 및 제어 패널 (컨테이너 박스로 묶기)
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container(border=True):
         st.markdown("#### 💾 데이터 저장 및 관리")
@@ -286,11 +286,13 @@ if st.session_state.flow_data:
         default_name = f"{today_str}_"
         custom_filename = st.text_input("저장할 파일 이름", value=default_name)
         
-        # 다운로드할 때 경고 기호(🔴, 🟡) 제거
-        export_df = df.copy()
+        # 다운로드할 때 경고 기호(🔴, 🟡, 🚨)와 불필요한 공백 제거
+        export_df = edited_df.copy()
         for col in export_df.columns:
             if export_df[col].dtype == object:
-                export_df[col] = export_df[col].apply(lambda x: str(x).replace("🔴 ", "").replace("🟡 ", "") if isinstance(x, str) else x)
+                export_df[col] = export_df[col].apply(
+                    lambda x: re.sub(r'[🔴🟡🚨]\s*', '', str(x)) if isinstance(x, str) else x
+                )
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         csv_bytes = export_df.to_csv(index=False).encode('utf-8-sig')

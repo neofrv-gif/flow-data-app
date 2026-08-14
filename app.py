@@ -283,7 +283,7 @@ if st.session_state.flow_data:
         
         kst = pytz.timezone('Asia/Seoul')
         today_str = datetime.now(kst).strftime("%y%m%d")
-        default_name = f"{today_str}_결과"
+        default_name = f"{today_str}_"
         custom_filename = st.text_input("저장할 파일 이름", value=default_name)
         
         # 다운로드할 때 경고 기호(🔴, 🟡) 제거

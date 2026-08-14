@@ -95,18 +95,19 @@ def format_measurement_time(first_start_time, last_start_time, last_duration):
             logical_end_dt = real_end_dt + timedelta(minutes=diff)
             logical_end_dt = logical_end_dt.replace(second=0)
             
-        return f"{logical_start_dt.strftime('%H:%M')} ~ {logical_end_dt.strftime('%H:%M')}"
+        return f"{logical_start_dt.strftime('%H:%M')}~{logical_end_dt.strftime('%H:%M')}"
     except Exception:
         return "-"
 
 def parse_dis_file(file_content, filename):
+    # 컬럼 재배치 적용 (최대 깊이 제거 -> 비고 대체, 변환기 깊이 맨 뒤로 이동)
     columns = [
         "파일명", "사이트 이름", "측정 날짜", "측정시간", "날씨", 
         "시작수위", "종료수위", "평균수위", "폭", "면적", 
         "평균속력", "평균깊이", "총 Q", "시리얼번호", "측정 횟수(Tr)", 
-        "변환기 깊이", "최대 깊이", "최대 스피드", "자기편차", 
+        "자기편차", "최대 스피드", "비고", 
         "측정된 %(mean)", "보트속력(mean)", "트랙거리(mean)", 
-        "작업자", "위치", "비고", "컴파스 오차(deg)"
+        "작업자", "위치", "변환기 깊이", "컴파스 오차(deg)"
     ]
     
     data = {col: "-" for col in columns}
@@ -128,7 +129,6 @@ def parse_dis_file(file_content, filename):
         "총 Q": r"(?:Total Q|전체 Q)\s*\(m\s*[³3]/s\);\s*([0-9.]+)",
         "시리얼번호": r"(?:Serial Number|시리얼 번호);\s*(.*)",
         "변환기 깊이": r"(?:Transducer Depth|센서부 깊이)\s*\(m\);\s*([0-9.]+)",
-        "최대 깊이": r"(?:Maximum Depth|최대 깊이|Maximum Depth)[\s\(]*m*\)*;\s*([0-9.]+)",
         "최대 스피드": r"(?:Maximum Speed|최대 스피드|Maximum Speed)[\s\(]*(?:m/s)*\)*;\s*([0-9.]+)",
         "자기편차": r"(?:Magnetic Declination|자기 편차)\s*\(deg\);\s*([0-9.-]+)",
         "작업자": r"(?:Party|측정자);\s*(.*)",
@@ -141,7 +141,10 @@ def parse_dis_file(file_content, filename):
             val = match.group(1).strip()
             if key == "총 Q" and val:
                 data[key] = f"{float(val):.3f}"
-            elif key in ["평균속력", "평균깊이", "폭", "면적"] and val:
+            elif key == "평균속력" and val:
+                spd_val = f"{float(val):.2f}"
+                data[key] = "0.01" if spd_val == "0.00" else spd_val
+            elif key in ["평균깊이", "폭", "면적"] and val:
                 data[key] = f"{float(val):.2f}"
             elif key == "시리얼번호":
                 if "RS5" in val.upper() or "RS5" in sys_type_val:
@@ -240,7 +243,7 @@ def parse_dis_file(file_content, filename):
             
             if pct_count > 0:
                 pct_val = pct_meas_sum / pct_count
-                if pct_val < 50:
+                if pct_val < 50 or pct_val > 100:
                     data["측정된 %(mean)"] = f"🔴 {pct_val:.2f}"
                 elif pct_val < 60:
                     data["측정된 %(mean)"] = f"🟡 {pct_val:.2f}"
@@ -250,9 +253,19 @@ def parse_dis_file(file_content, filename):
         except Exception:
             pass
 
+    # RS5 변환기 깊이 경고 (0.06이 아닐 경우 🔴)
+    if "RS5" in str(data.get("시리얼번호", "")):
+        td_val = data.get("변환기 깊이", "-")
+        if td_val != "-":
+            try:
+                if float(td_val) != 0.06:
+                    data["변환기 깊이"] = f"🔴 {td_val}"
+            except ValueError:
+                pass
+
     return data
 
-# 파일 업로더 라벨 간소화
+# 파일 업로더
 uploaded_files = st.file_uploader(
     "여기에 `.dis` 파일을 여러 개 드래그하거나 클릭하여 업로드하세요.", 
     type=["dis", "txt"], 
@@ -274,7 +287,7 @@ if st.session_state.flow_data:
     
     st.divider()
     
-    # 상단 툴바(안내문구 및 컨트롤 패널)를 컬럼으로 배치
+    # 상단 툴바
     header_col1, header_col2 = st.columns([7, 3])
     with header_col1:
         st.markdown("### 📊 추출 및 검증 결과")
@@ -282,17 +295,16 @@ if st.session_state.flow_data:
         
     edited_df = st.data_editor(df, use_container_width=True, hide_index=True)
     
-    # 다운로드 및 제어 패널 (컨테이너 박스로 묶기)
+    # 다운로드 및 제어 패널
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container(border=True):
         st.markdown("#### 💾 데이터 저장 및 다운로드")
         
-        # 파일명 입력 폼 (엔터 안 쳐도 적용되도록 버튼 연동)
         name_col1, name_col2 = st.columns([8, 2])
         with name_col1:
             input_filename = st.text_input("저장할 파일 이름을 입력하세요", value=st.session_state.custom_filename)
         with name_col2:
-            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True) # 버튼 높이 맞춤
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
             if st.button("✔️ 파일명 적용", type="secondary", use_container_width=True):
                 st.session_state.custom_filename = input_filename
                 st.success(f"'{input_filename}'(으)로 적용되었습니다!")
@@ -321,5 +333,5 @@ if st.session_state.flow_data:
             if st.button("🔄 전체 데이터 초기화", type="primary", use_container_width=True):
                 st.session_state.flow_data = []
                 st.session_state.uploader_key += 1
-                st.session_state.custom_filename = f"{datetime.now(kst).strftime('%y%m%d')}_" # 파일명도 오늘 날짜로 초기화
+                st.session_state.custom_filename = f"{datetime.now(kst).strftime('%y%m%d')}_"
                 st.rerun()

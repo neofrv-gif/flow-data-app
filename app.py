@@ -29,7 +29,7 @@ st.markdown("""
         color: white;
         border: 1px solid #4a90e2;
     }
-    /* 초기화 버튼 스타일링 (부드러운 레드) */
+    /* 일반 확인/초기화 버튼 스타일링 */
     div.stButton > button[kind="primary"] {
         background-color: #ff6b6b;
         border: none;
@@ -38,6 +38,10 @@ st.markdown("""
     }
     div.stButton > button[kind="primary"]:hover {
         background-color: #fa5252;
+    }
+    div.stButton > button[kind="secondary"] {
+        border-radius: 8px;
+        border: 1px solid #ced4da;
     }
     /* 안내 문구 박스 스타일 조정 */
     div[data-testid="stTitle"] {
@@ -54,6 +58,9 @@ if "flow_data" not in st.session_state:
     st.session_state.flow_data = []
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
+if "custom_filename" not in st.session_state:
+    kst = pytz.timezone('Asia/Seoul')
+    st.session_state.custom_filename = f"{datetime.now(kst).strftime('%y%m%d')}_"
 
 def format_measurement_time(first_start_time, last_start_time, last_duration):
     dummy_date = date(2000, 1, 1) 
@@ -271,44 +278,48 @@ if st.session_state.flow_data:
     header_col1, header_col2 = st.columns([7, 3])
     with header_col1:
         st.markdown("### 📊 추출 및 검증 결과")
-        st.caption("🚨 아래 표는 엑셀처럼 수정이 가능합니다. 편집한 뒤 아래에서 다운로드해야 수정한 내용이 저장됩니다.")
+        st.caption("🚨 아래 표는 엑셀처럼 직접 수정이 가능합니다. 데이터를 먼저 편집한 뒤 아래에서 다운로드해야 저장됩니다.")
         
-    # 🚨 수정된 데이터를 온전히 받아오기 위해 st.data_editor를 다운로드 로직 위로 올렸습니다.
     edited_df = st.data_editor(df, use_container_width=True, hide_index=True)
     
     # 다운로드 및 제어 패널 (컨테이너 박스로 묶기)
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container(border=True):
-        st.markdown("#### 💾 데이터 저장 및 관리")
+        st.markdown("#### 💾 데이터 저장 및 다운로드")
         
-        kst = pytz.timezone('Asia/Seoul')
-        today_str = datetime.now(kst).strftime("%y%m%d")
-        default_name = f"{today_str}_"
-        custom_filename = st.text_input("저장할 파일 이름", value=default_name)
-        
-        # 다운로드할 때 경고 기호(🔴, 🟡, 🚨)와 불필요한 공백 제거
+        # 파일명 입력 폼 (엔터 안 쳐도 적용되도록 버튼 연동)
+        name_col1, name_col2 = st.columns([8, 2])
+        with name_col1:
+            input_filename = st.text_input("저장할 파일 이름을 입력하세요", value=st.session_state.custom_filename)
+        with name_col2:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True) # 버튼 높이 맞춤
+            if st.button("✔️ 파일명 적용", type="secondary", use_container_width=True):
+                st.session_state.custom_filename = input_filename
+                st.success(f"'{input_filename}'(으)로 적용되었습니다!")
+                
+        # 다운로드할 때 경고 기호(🔴, 🟡, 🚨) 무조건 강력 제거
         export_df = edited_df.copy()
         for col in export_df.columns:
-            if export_df[col].dtype == object:
-                export_df[col] = export_df[col].apply(
-                    lambda x: re.sub(r'[🔴🟡🚨]\s*', '', str(x)) if isinstance(x, str) else x
-                )
+            export_df[col] = export_df[col].apply(
+                lambda x: re.sub(r'[🔴🟡🚨]\s*', '', str(x)) if isinstance(x, str) else x
+            )
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         csv_bytes = export_df.to_csv(index=False).encode('utf-8-sig')
         
         with btn_col1:
-            st.download_button(label="📥 CSV 다운로드", data=csv_bytes, file_name=f"{custom_filename}.csv", mime="text/csv", use_container_width=True)
+            st.download_button(label="📥 CSV 다운로드", data=csv_bytes, file_name=f"{st.session_state.custom_filename}.csv", mime="text/csv", use_container_width=True)
             
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             export_df.to_excel(writer, index=False, sheet_name='수문유량결과')
             
         with btn_col2:
-            st.download_button(label="📊 Excel 다운로드", data=output.getvalue(), file_name=f"{custom_filename}.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
+            st.download_button(label="📊 Excel 다운로드", data=output.getvalue(), file_name=f"{st.session_state.custom_filename}.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
 
         with btn_col3:
             if st.button("🔄 전체 데이터 초기화", type="primary", use_container_width=True):
                 st.session_state.flow_data = []
                 st.session_state.uploader_key += 1
+                st.session_state.custom_filename = f"{datetime.now(kst).strftime('%y%m%d')}_" # 파일명도 오늘 날짜로 초기화
                 st.rerun()
